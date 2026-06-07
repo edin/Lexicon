@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Lexicon\Lexer;
 
 use UnitEnum;
-use Lexicon\Lexer\Matchers\ITokenMatcher;
+use Lexicon\Lexer\Matchers\TokenMatcherInterface;
 
 final readonly class TokenMetadata
 {
     /**
-     * @param class-string<ITokenMatcher>|null $matcherClass
+     * @param class-string<TokenMatcherInterface>|null $matcherClass
      */
     public function __construct(
         public UnitEnum $type,

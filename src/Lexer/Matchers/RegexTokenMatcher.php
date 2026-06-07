@@ -9,7 +9,7 @@ use Lexicon\Lexer\Token;
 use Lexicon\Lexer\TokenMetadata;
 use LogicException;
 
-final class RegexTokenMatcher implements ITokenMatcher
+final class RegexTokenMatcher implements TokenMatcherInterface
 {
     public function __construct(private readonly TokenMetadata $metadata)
     {

@@ -8,7 +8,7 @@ use Lexicon\Lexer\Lexer;
 use Lexicon\Lexer\Token;
 use Lexicon\Lexer\TokenMetadata;
 
-final class IntegerTokenMatcher implements ITokenMatcher
+final class IntegerTokenMatcher implements TokenMatcherInterface
 {
     public function __construct(private readonly TokenMetadata $metadata)
     {

@@ -1,6 +1,6 @@
 # Matchers
 
-Matchers implement `Lexicon\Lexer\Matchers\ITokenMatcher`.
+Matchers implement `Lexicon\Lexer\Matchers\TokenMatcherInterface`.
 
 ## Generic Matchers
 
@@ -53,11 +53,11 @@ case Name;
 
 ```php
 use Lexicon\Lexer\Lexer;
-use Lexicon\Lexer\Matchers\ITokenMatcher;
+use Lexicon\Lexer\Matchers\TokenMatcherInterface;
 use Lexicon\Lexer\Token;
 use Lexicon\Lexer\TokenMetadata;
 
-final class PercentTokenMatcher implements ITokenMatcher
+final class PercentTokenMatcher implements TokenMatcherInterface
 {
     public function __construct(private readonly TokenMetadata $metadata)
     {

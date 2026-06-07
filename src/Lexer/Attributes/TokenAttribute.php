@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Lexicon\Lexer\Attributes;
 
 use InvalidArgumentException;
-use Lexicon\Lexer\Matchers\ITokenMatcher;
+use Lexicon\Lexer\Matchers\TokenMatcherInterface;
 use Lexicon\Lexer\TokenGroup;
 use UnitEnum;
 
@@ -23,9 +23,9 @@ abstract readonly class TokenAttribute
         public ?UnitEnum $push = null,
         public bool $pop = false,
     ) {
-        if ($matcherClass !== null && !is_subclass_of($matcherClass, ITokenMatcher::class)) {
+        if ($matcherClass !== null && !is_subclass_of($matcherClass, TokenMatcherInterface::class)) {
             throw new InvalidArgumentException(
-                sprintf("Matcher class '%s' must implement %s.", $matcherClass, ITokenMatcher::class)
+                sprintf("Matcher class '%s' must implement %s.", $matcherClass, TokenMatcherInterface::class)
             );
         }
 

@@ -8,7 +8,7 @@ use Lexicon\Lexer\Lexer;
 use Lexicon\Lexer\Token;
 use Lexicon\Lexer\TokenMetadata;
 
-final readonly class IdentifierTokenMatcher implements ITokenMatcher
+final readonly class IdentifierTokenMatcher implements TokenMatcherInterface
 {
     /**
      * @param array<string, \UnitEnum> $tokenMap

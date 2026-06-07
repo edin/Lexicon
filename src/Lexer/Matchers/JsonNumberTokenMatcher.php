@@ -8,7 +8,7 @@ use Lexicon\Lexer\Lexer;
 use Lexicon\Lexer\Token;
 use Lexicon\Lexer\TokenMetadata;
 
-final class JsonNumberTokenMatcher implements ITokenMatcher
+final class JsonNumberTokenMatcher implements TokenMatcherInterface
 {
     public function __construct(private readonly TokenMetadata $metadata)
     {

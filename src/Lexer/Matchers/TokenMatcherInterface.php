@@ -7,7 +7,7 @@ namespace Lexicon\Lexer\Matchers;
 use Lexicon\Lexer\Lexer;
 use Lexicon\Lexer\Token;
 
-interface ITokenMatcher
+interface TokenMatcherInterface
 {
     public function match(Lexer $lexer): ?Token;
 }

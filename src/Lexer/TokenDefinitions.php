@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Lexicon\Lexer;
 
 use Lexicon\Lexer\Matchers\IdentifierTokenMatcher;
-use Lexicon\Lexer\Matchers\ITokenMatcher;
+use Lexicon\Lexer\Matchers\TokenMatcherInterface;
 use Lexicon\Lexer\Matchers\TextTokenMatcher;
 use LogicException;
 
@@ -16,7 +16,7 @@ final class TokenDefinitions
     }
 
     /**
-     * @return list<ITokenMatcher>
+     * @return list<TokenMatcherInterface>
      */
     public function all(): array
     {
@@ -31,7 +31,7 @@ final class TokenDefinitions
     }
 
     /**
-     * @return list<ITokenMatcher>
+     * @return list<TokenMatcherInterface>
      */
     private function build(): array
     {
@@ -76,12 +76,12 @@ final class TokenDefinitions
 
     /**
      */
-    private static function createMatcher(TokenMetadata $metadata): ITokenMatcher
+    private static function createMatcher(TokenMetadata $metadata): TokenMatcherInterface
     {
         $matcherClass = $metadata->matcherClass;
         $matcher = new $matcherClass($metadata);
 
-        if (!$matcher instanceof ITokenMatcher) {
+        if (!$matcher instanceof TokenMatcherInterface) {
             throw new LogicException(sprintf("Could not create token matcher '%s'.", $matcherClass));
         }
 

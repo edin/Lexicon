@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Lexicon\Lexer\Attributes;
 
 use Attribute;
-use Lexicon\Lexer\Matchers\ITokenMatcher;
+use Lexicon\Lexer\Matchers\TokenMatcherInterface;
 use Lexicon\Lexer\TokenGroup;
 use UnitEnum;
 
@@ -13,7 +13,7 @@ use UnitEnum;
 final readonly class Trivia extends TokenAttribute
 {
     /**
-     * @param class-string<ITokenMatcher> $matcherClass
+     * @param class-string<TokenMatcherInterface> $matcherClass
      */
     public function __construct(
         string $matcherClass,
