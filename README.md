@@ -28,6 +28,7 @@ composer test
 - [Token Attributes](docs/token-attributes.md)
 - [Matchers](docs/matchers.md)
 - [Modes](docs/modes.md)
+- [Parser Primitives](docs/parser.md)
 - [Debugging Tokens](docs/debugging.md)
 - [Examples](docs/examples.md)
 
@@ -37,4 +38,5 @@ composer test
 php examples/basic-scanner.php
 php examples/json-scanner.php
 php examples/xml-scanner.php
+php examples/math.php
 ```

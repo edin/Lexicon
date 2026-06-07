@@ -6,6 +6,7 @@ Run examples from the project root:
 php examples/basic-scanner.php
 php examples/json-scanner.php
 php examples/xml-scanner.php
+php examples/math.php
 ```
 
 ## Basic Scanner
@@ -39,3 +40,14 @@ php examples/xml-scanner.php
 - XML processing instructions
 - XML CDATA
 - token table mode output
+
+## Math Parser
+
+`examples/math.php` shows:
+
+- math token definitions
+- recursive descent parser primitives
+- operator precedence for `*`/`/` over `+`/`-`
+- grouped expressions
+- token table output
+- AST printer output
