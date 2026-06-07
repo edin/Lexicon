@@ -1,0 +1,11 @@
+/docs export-ignore
+/examples export-ignore
+/tests export-ignore
+/.github export-ignore
+/.phpstan.cache export-ignore
+/.phpunit.cache export-ignore
+/vendor export-ignore
+/.gitignore export-ignore
+/composer.lock export-ignore
+/phpstan.neon export-ignore
+/phpunit.xml export-ignore
