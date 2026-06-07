@@ -199,6 +199,64 @@ final readonly class ArgumentListNode
 }
 ```
 
+### Optional
+
+`#[Optional]` maps to `A?` and forwards `?A` to the constructor:
+
+```php
+use Lexicon\Parser\Attributes\Optional;
+
+#[Optional(TypeAnnotationNode::class)]
+final readonly class OptionalTypeAnnotationNode
+{
+    public function __construct(public ?TypeAnnotationNode $node)
+    {
+    }
+}
+```
+
+### Many
+
+`#[Many]` maps to `A*` and forwards `list<A>` to the constructor:
+
+```php
+use Lexicon\Parser\Attributes\Many;
+
+#[Many(MemberNode::class)]
+final readonly class MemberListNode
+{
+    /**
+     * @param list<MemberNode> $members
+     */
+    public function __construct(public array $members)
+    {
+    }
+}
+```
+
+### SeparatedBy
+
+`#[SeparatedBy]` maps to `A ("," A)*` and forwards `list<A>` to the constructor:
+
+```php
+use Lexicon\Parser\Attributes\SeparatedBy;
+
+#[SeparatedBy(
+    ArgumentNode::class,
+    MyToken::Comma,
+    allowTrailingSeparator: true
+)]
+final readonly class ArgumentListNode
+{
+    /**
+     * @param list<ArgumentNode> $arguments
+     */
+    public function __construct(public array $arguments)
+    {
+    }
+}
+```
+
 ### Fold
 
 `#[Fold]` builds a binary AST node by forwarding the fold result into the node constructor:
@@ -227,6 +285,24 @@ $expression = $parser->parse(BinaryExpressionNode::class);
 ```
 
 The node class does not need a `parse()` method. For custom logic, a node can still implement `ParseableNodeInterface`.
+
+### BNF Mapping
+
+Most common BNF/EBNF notation now has a direct parser recipe:
+
+```txt
+BNF / EBNF             Lexicon recipe
+---------------------------------------------------------
+Terminal              #[Terminal(...)]
+A | B | C             #[OneOf([...])]
+"(" A ")"             #[Between(...)]
+A?                    #[Optional(...)]
+A*                    #[Many(...)]
+A ("," A)*            #[SeparatedBy(...)]
+"(" A ("," A)* ")"    #[ListBetween(...)]
+A (op A)*             #[Fold(...)]
+custom                ParseableNodeInterface
+```
 
 ## Small Parser DSL
 
@@ -376,3 +452,23 @@ AddExpressionNode
   left: IntegerNode "1"
   right: IntegerNode "2"
 ```
+
+Use `GrammarPrinter` to inspect the BNF-ish grammar described by parser attributes:
+
+```php
+use Lexicon\Parser\Debug\GrammarPrinter;
+
+echo GrammarPrinter::format(AdditiveExpressionNode::class);
+```
+
+Example:
+
+```txt
+AdditiveExpressionNode ::= MultiplicativeExpressionNode ((Plus | Minus) MultiplicativeExpressionNode)*
+MultiplicativeExpressionNode ::= PrimaryExpressionNode ((Star | Slash) PrimaryExpressionNode)*
+PrimaryExpressionNode ::= GroupedExpressionNode | NumberNode
+GroupedExpressionNode ::= OpenParen AdditiveExpressionNode CloseParen
+NumberNode ::= Number
+```
+
+Custom parser nodes are printed as `<custom>`. Unsupported parser attributes are printed by attribute name, such as `<SomeAttribute>`.

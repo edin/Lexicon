@@ -13,6 +13,9 @@ use Lexicon\Tests\Fixtures\AttributeExpressionNodeInterface;
 use Lexicon\Tests\Fixtures\AttributeGroupedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeIntegerListNode;
 use Lexicon\Tests\Fixtures\AttributeIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeManyIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeOptionalIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeSeparatedIntegerNode;
 use Lexicon\Tests\Fixtures\ExpressionNodeInterface;
 use Lexicon\Tests\Fixtures\ExpressionTokenType;
 use Lexicon\Tests\Fixtures\IntegerNode;
@@ -130,6 +133,60 @@ final class ParserTest extends TestCase
 
         self::assertInstanceOf(AttributeGroupedIntegerNode::class, $node);
         self::assertSame('123', $node->node->token->value);
+    }
+
+    public function testParserCanUseOptionalAttributeOnNodeClass(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('123');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeOptionalIntegerNode::class);
+
+        self::assertInstanceOf(AttributeOptionalIntegerNode::class, $node);
+        self::assertInstanceOf(AttributeIntegerNode::class, $node->node);
+        self::assertSame('123', $node->node->token->value);
+    }
+
+    public function testParserCanUseOptionalAttributeWhenNodeIsMissing(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('+');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeOptionalIntegerNode::class);
+
+        self::assertInstanceOf(AttributeOptionalIntegerNode::class, $node);
+        self::assertNull($node->node);
+        self::assertTrue($parser->tokens->check(ExpressionTokenType::Plus));
+    }
+
+    public function testParserCanUseManyAttributeOnNodeClass(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('1 2 3 +');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeManyIntegerNode::class);
+
+        self::assertInstanceOf(AttributeManyIntegerNode::class, $node);
+        self::assertSame(['1', '2', '3'], array_map(
+            fn (AttributeIntegerNode $node): string => $node->token->value,
+            $node->items
+        ));
+        self::assertTrue($parser->tokens->check(ExpressionTokenType::Plus));
+    }
+
+    public function testParserCanUseSeparatedByAttributeOnNodeClass(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('1, 2, 3,');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeSeparatedIntegerNode::class);
+
+        self::assertInstanceOf(AttributeSeparatedIntegerNode::class, $node);
+        self::assertSame(['1', '2', '3'], array_map(
+            fn (AttributeIntegerNode $node): string => $node->token->value,
+            $node->items
+        ));
+        self::assertFalse($parser->diagnostics->hasErrors());
     }
 
     public function testParserFoldReturnsFirstItemWhenSeparatorIsMissing(): void

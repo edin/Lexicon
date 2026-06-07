@@ -9,7 +9,10 @@ use Lexicon\Lexer\Token;
 use Lexicon\Parser\Attributes\Between as BetweenAttribute;
 use Lexicon\Parser\Attributes\Fold;
 use Lexicon\Parser\Attributes\ListBetween as ListBetweenAttribute;
+use Lexicon\Parser\Attributes\Many as ManyAttribute;
 use Lexicon\Parser\Attributes\OneOf as OneOfAttribute;
+use Lexicon\Parser\Attributes\Optional as OptionalAttribute;
+use Lexicon\Parser\Attributes\SeparatedBy as SeparatedByAttribute;
 use Lexicon\Parser\Attributes\Terminal as TerminalAttribute;
 use InvalidArgumentException;
 use LogicException;
@@ -80,6 +83,21 @@ final class Parser
         $listBetweenAttributes = $reflection->getAttributes(ListBetweenAttribute::class);
         if ($listBetweenAttributes !== []) {
             return $this->parseListBetween($reflection, $listBetweenAttributes[0]->newInstance(), $report);
+        }
+
+        $optionalAttributes = $reflection->getAttributes(OptionalAttribute::class);
+        if ($optionalAttributes !== []) {
+            return $this->parseOptionalAttribute($reflection, $optionalAttributes[0]->newInstance());
+        }
+
+        $manyAttributes = $reflection->getAttributes(ManyAttribute::class);
+        if ($manyAttributes !== []) {
+            return $this->parseManyAttribute($reflection, $manyAttributes[0]->newInstance());
+        }
+
+        $separatedByAttributes = $reflection->getAttributes(SeparatedByAttribute::class);
+        if ($separatedByAttributes !== []) {
+            return $this->parseSeparatedByAttribute($reflection, $separatedByAttributes[0]->newInstance());
         }
 
         $foldAttributes = $reflection->getAttributes(Fold::class);
@@ -424,6 +442,50 @@ final class Parser
             $listBetween->allowTrailingSeparator,
             $listBetween->openMessage,
             $listBetween->closeMessage
+        );
+
+        return $nodeClass->newInstance($items);
+    }
+
+    /**
+     * @template T of object
+     * @param ReflectionClass<T> $nodeClass
+     * @return T
+     */
+    private function parseOptionalAttribute(ReflectionClass $nodeClass, OptionalAttribute $optional): object
+    {
+        $node = $this->optional(
+            fn (self $parser): ?object => $parser->parseNode($optional->node, report: false)
+        );
+
+        return $nodeClass->newInstance($node);
+    }
+
+    /**
+     * @template T of object
+     * @param ReflectionClass<T> $nodeClass
+     * @return T
+     */
+    private function parseManyAttribute(ReflectionClass $nodeClass, ManyAttribute $many): object
+    {
+        $items = $this->many(
+            fn (self $parser): ?object => $parser->parseNode($many->node, report: false)
+        );
+
+        return $nodeClass->newInstance($items);
+    }
+
+    /**
+     * @template T of object
+     * @param ReflectionClass<T> $nodeClass
+     * @return T
+     */
+    private function parseSeparatedByAttribute(ReflectionClass $nodeClass, SeparatedByAttribute $separatedBy): object
+    {
+        $items = $this->separatedBy(
+            fn (self $parser): ?object => $parser->parseNode($separatedBy->node, report: false),
+            $separatedBy->separator,
+            $separatedBy->allowTrailingSeparator
         );
 
         return $nodeClass->newInstance($items);

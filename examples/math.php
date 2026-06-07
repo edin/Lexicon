@@ -19,6 +19,7 @@ use Lexicon\Parser\Attributes\Fold;
 use Lexicon\Parser\Attributes\OneOf;
 use Lexicon\Parser\Attributes\Terminal;
 use Lexicon\Parser\Debug\AstPrinter;
+use Lexicon\Parser\Debug\GrammarPrinter;
 use Lexicon\Parser\Parser;
 
 enum MathToken
@@ -136,6 +137,9 @@ $expression = MathParser::parse($parser);
 
 echo 'Source:' . PHP_EOL;
 echo $source . PHP_EOL . PHP_EOL;
+
+echo 'Grammar:' . PHP_EOL;
+echo GrammarPrinter::format(AdditiveExpressionNode::class) . PHP_EOL . PHP_EOL;
 
 echo 'Tokens:' . PHP_EOL;
 echo TokenTable::format($tokens, includeTrivia: false) . PHP_EOL . PHP_EOL;
