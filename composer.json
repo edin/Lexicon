@@ -1,0 +1,51 @@
+{
+  "name": "edin/lexicon",
+  "description": "Attribute-driven PHP lexer and scanner library with enum tokens, trivia preservation, modes, diagnostics, and JSON/XML matchers.",
+  "type": "library",
+  "keywords": [
+    "lexer",
+    "scanner",
+    "tokenizer",
+    "parser",
+    "attributes",
+    "enum",
+    "json",
+    "xml"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Edin Omeragic",
+      "role": "Author"
+    },
+    {
+      "name": "Codex",
+      "role": "Contributor"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Lexicon\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Lexicon\\Tests\\": "tests/"
+    }
+  },
+  "require": {
+    "php": "^8.2"
+  },
+  "require-dev": {
+    "phpstan/phpstan": "^2.0",
+    "phpunit/phpunit": "^11.5"
+  },
+  "scripts": {
+    "analyse": "phpstan analyse",
+    "test": "phpunit",
+    "test:dox": "phpunit --testdox --colors=always"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}
