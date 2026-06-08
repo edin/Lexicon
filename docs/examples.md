@@ -46,8 +46,9 @@ php examples/math.php
 `examples/math.php` shows:
 
 - math token definitions
-- recursive descent parser primitives
+- attribute parser recipes
 - operator precedence for `*`/`/` over `+`/`-`
 - grouped expressions
+- generated grammar output
 - token table output
 - AST printer output

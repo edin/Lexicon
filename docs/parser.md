@@ -257,6 +257,49 @@ final readonly class ArgumentListNode
 }
 ```
 
+### Sequence
+
+`#[Sequence]` maps to `A B C` and forwards each parsed part to the constructor. Parts can be terminal enum cases, node classes, or a list of terminal enum cases for operator-style alternatives:
+
+```php
+use Lexicon\Lexer\Token;
+use Lexicon\Parser\Attributes\Sequence;
+
+#[Sequence([
+    MyToken::Select,
+    SelectListNode::class,
+    MyToken::From,
+    IdentifierNode::class,
+    OptionalWhereClauseNode::class,
+])]
+final readonly class SelectStatementNode
+{
+    public function __construct(
+        public Token $select,
+        public SelectListNode $columns,
+        public Token $from,
+        public IdentifierNode $table,
+        public OptionalWhereClauseNode $where
+    ) {
+    }
+}
+
+#[Sequence([
+    ValueExpressionNode::class,
+    [MyToken::GreaterEqual, MyToken::Equal, MyToken::Less],
+    ValueExpressionNode::class,
+])]
+final readonly class ComparisonExpressionNode
+{
+    public function __construct(
+        public ValueExpressionNode $left,
+        public Token $operator,
+        public ValueExpressionNode $right
+    ) {
+    }
+}
+```
+
 ### Fold
 
 `#[Fold]` builds a binary AST node by forwarding the fold result into the node constructor:
@@ -300,6 +343,7 @@ A?                    #[Optional(...)]
 A*                    #[Many(...)]
 A ("," A)*            #[SeparatedBy(...)]
 "(" A ("," A)* ")"    #[ListBetween(...)]
+A B C                 #[Sequence(...)]
 A (op A)*             #[Fold(...)]
 custom                ParseableNodeInterface
 ```
@@ -464,6 +508,8 @@ echo GrammarPrinter::format(AdditiveExpressionNode::class);
 Example:
 
 ```txt
+Start ::= AdditiveExpressionNode
+
 AdditiveExpressionNode ::= MultiplicativeExpressionNode ((Plus | Minus) MultiplicativeExpressionNode)*
 MultiplicativeExpressionNode ::= PrimaryExpressionNode ((Star | Slash) PrimaryExpressionNode)*
 PrimaryExpressionNode ::= GroupedExpressionNode | NumberNode

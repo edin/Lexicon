@@ -16,6 +16,8 @@ use Lexicon\Tests\Fixtures\AttributeIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeManyIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeOptionalIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeSeparatedIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeGroupedSequenceNode;
+use Lexicon\Tests\Fixtures\AttributeSignedIntegerNode;
 use Lexicon\Tests\Fixtures\ExpressionNodeInterface;
 use Lexicon\Tests\Fixtures\ExpressionTokenType;
 use Lexicon\Tests\Fixtures\IntegerNode;
@@ -187,6 +189,31 @@ final class ParserTest extends TestCase
             $node->items
         ));
         self::assertFalse($parser->diagnostics->hasErrors());
+    }
+
+    public function testParserCanUseSequenceAttributeOnNodeClass(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('(123)');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeGroupedSequenceNode::class);
+
+        self::assertInstanceOf(AttributeGroupedSequenceNode::class, $node);
+        self::assertSame(ExpressionTokenType::OpenParen, $node->open->type);
+        self::assertSame('123', $node->node->token->value);
+        self::assertSame(ExpressionTokenType::CloseParen, $node->close->type);
+    }
+
+    public function testParserCanUseSequenceAttributeWithTerminalAlternatives(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('-123');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeSignedIntegerNode::class);
+
+        self::assertInstanceOf(AttributeSignedIntegerNode::class, $node);
+        self::assertSame(ExpressionTokenType::Minus, $node->sign->type);
+        self::assertSame('123', $node->number->token->value);
     }
 
     public function testParserFoldReturnsFirstItemWhenSeparatorIsMissing(): void

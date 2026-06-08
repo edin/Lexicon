@@ -13,6 +13,7 @@ use Lexicon\Parser\Attributes\Many as ManyAttribute;
 use Lexicon\Parser\Attributes\OneOf as OneOfAttribute;
 use Lexicon\Parser\Attributes\Optional as OptionalAttribute;
 use Lexicon\Parser\Attributes\SeparatedBy as SeparatedByAttribute;
+use Lexicon\Parser\Attributes\Sequence as SequenceAttribute;
 use Lexicon\Parser\Attributes\Terminal as TerminalAttribute;
 use InvalidArgumentException;
 use LogicException;
@@ -98,6 +99,11 @@ final class Parser
         $separatedByAttributes = $reflection->getAttributes(SeparatedByAttribute::class);
         if ($separatedByAttributes !== []) {
             return $this->parseSeparatedByAttribute($reflection, $separatedByAttributes[0]->newInstance());
+        }
+
+        $sequenceAttributes = $reflection->getAttributes(SequenceAttribute::class);
+        if ($sequenceAttributes !== []) {
+            return $this->parseSequenceAttribute($reflection, $sequenceAttributes[0]->newInstance(), $report);
         }
 
         $foldAttributes = $reflection->getAttributes(Fold::class);
@@ -489,6 +495,73 @@ final class Parser
         );
 
         return $nodeClass->newInstance($items);
+    }
+
+    /**
+     * @template T of object
+     * @param ReflectionClass<T> $nodeClass
+     * @return T|null
+     */
+    private function parseSequenceAttribute(
+        ReflectionClass $nodeClass,
+        SequenceAttribute $sequence,
+        bool $report
+    ): ?object {
+        $position = $this->tokens->save();
+        $values = [];
+
+        foreach ($sequence->parts as $part) {
+            $value = $this->parseSequencePart($part, $report);
+
+            if ($value === null) {
+                $this->tokens->restore($position);
+
+                return null;
+            }
+
+            $values[] = $value;
+        }
+
+        return $nodeClass->newInstanceArgs($values);
+    }
+
+    /**
+     * @param UnitEnum|class-string<object>|non-empty-list<UnitEnum> $part
+     */
+    private function parseSequencePart(UnitEnum|string|array $part, bool $report): ?object
+    {
+        if ($part instanceof UnitEnum) {
+            return $report
+                ? $this->expect($part, sprintf('Expected %s.', $part->name))
+                : $this->tokens->match($part);
+        }
+
+        if (is_string($part)) {
+            return $this->parseNode($part, $report);
+        }
+
+        return $this->parseSequenceTerminalChoice($part, $report);
+    }
+
+    /**
+     * @param non-empty-list<UnitEnum> $terminals
+     */
+    private function parseSequenceTerminalChoice(array $terminals, bool $report): ?Token
+    {
+        $match = $this->matchAny($terminals);
+        if ($match !== null || !$report) {
+            return $match;
+        }
+
+        $this->diagnostics->report(
+            $this->tokens->current()->location,
+            sprintf('Expected one of: %s.', implode(', ', array_map(
+                fn (UnitEnum $terminal): string => $terminal->name,
+                $terminals
+            )))
+        );
+
+        return $this->tokens->current();
     }
 
     /**

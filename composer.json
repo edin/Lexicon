@@ -1,12 +1,15 @@
 {
   "name": "edin/lexicon",
-  "description": "Attribute-driven PHP lexer and scanner library with enum tokens, trivia preservation, modes, diagnostics, and JSON/XML matchers.",
+  "description": "Attribute-driven PHP lexer and parser toolkit with enum tokens, grammar recipes, diagnostics, and AST/BNF debugging.",
   "type": "library",
   "keywords": [
     "lexer",
     "scanner",
     "tokenizer",
     "parser",
+    "grammar",
+    "ast",
+    "bnf",
     "attributes",
     "enum",
     "json",

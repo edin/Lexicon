@@ -6,11 +6,13 @@ namespace Lexicon\Parser\Debug;
 
 use Lexicon\Parser\Attributes\Between;
 use Lexicon\Parser\Attributes\Fold;
+use Lexicon\Parser\Attributes\Grammar;
 use Lexicon\Parser\Attributes\ListBetween;
 use Lexicon\Parser\Attributes\Many;
 use Lexicon\Parser\Attributes\OneOf;
 use Lexicon\Parser\Attributes\Optional;
 use Lexicon\Parser\Attributes\SeparatedBy;
+use Lexicon\Parser\Attributes\Sequence;
 use Lexicon\Parser\Attributes\Terminal;
 use Lexicon\Parser\ParseableNodeInterface;
 use ReflectionAttribute;
@@ -28,6 +30,8 @@ final class GrammarPrinter
     public static function format(string $nodeClass): string
     {
         $printer = new self();
+        $printer->rules[] = sprintf('Start ::= %s', $printer->nodeName($nodeClass));
+        $printer->rules[] = '';
         $printer->visit($nodeClass);
 
         return implode(PHP_EOL, $printer->rules);
@@ -57,6 +61,11 @@ final class GrammarPrinter
      */
     private function expression(ReflectionClass $reflection): string
     {
+        $grammar = $this->attribute($reflection, Grammar::class);
+        if ($grammar instanceof Grammar) {
+            return $grammar->expression;
+        }
+
         $oneOf = $this->attribute($reflection, OneOf::class);
         if ($oneOf instanceof OneOf) {
             return implode(' | ', array_map($this->nodeName(...), $oneOf->nodes));
@@ -119,6 +128,11 @@ final class GrammarPrinter
             );
         }
 
+        $sequence = $this->attribute($reflection, Sequence::class);
+        if ($sequence instanceof Sequence) {
+            return implode(' ', array_map($this->sequencePart(...), $sequence->parts));
+        }
+
         $unsupported = $this->unsupportedParserAttribute($reflection);
         if ($unsupported !== null) {
             return sprintf('<%s>', $unsupported);
@@ -153,6 +167,11 @@ final class GrammarPrinter
      */
     private function dependencies(ReflectionClass $reflection): array
     {
+        $grammar = $this->attribute($reflection, Grammar::class);
+        if ($grammar instanceof Grammar) {
+            return $grammar->dependencies;
+        }
+
         $oneOf = $this->attribute($reflection, OneOf::class);
         if ($oneOf instanceof OneOf) {
             return $oneOf->nodes;
@@ -188,6 +207,14 @@ final class GrammarPrinter
             return [$fold->operand];
         }
 
+        $sequence = $this->attribute($reflection, Sequence::class);
+        if ($sequence instanceof Sequence) {
+            return array_values(array_filter(
+                $sequence->parts,
+                fn (mixed $part): bool => is_string($part)
+            ));
+        }
+
         return [];
     }
 
@@ -214,6 +241,22 @@ final class GrammarPrinter
     }
 
     /**
+     * @param UnitEnum|class-string<object>|non-empty-list<UnitEnum> $part
+     */
+    private function sequencePart(UnitEnum|string|array $part): string
+    {
+        if ($part instanceof UnitEnum) {
+            return $this->terminalName($part);
+        }
+
+        if (is_string($part)) {
+            return $this->nodeName($part);
+        }
+
+        return sprintf('(%s)', $this->terminalNames($part));
+    }
+
+    /**
      * @param ReflectionClass<object> $reflection
      */
     private function unsupportedParserAttribute(ReflectionClass $reflection): ?string
@@ -228,11 +271,13 @@ final class GrammarPrinter
             if (in_array($name, [
                 Between::class,
                 Fold::class,
+                Grammar::class,
                 ListBetween::class,
                 Many::class,
                 OneOf::class,
                 Optional::class,
                 SeparatedBy::class,
+                Sequence::class,
                 Terminal::class,
             ], true)) {
                 continue;
