@@ -11,9 +11,12 @@ use Lexicon\Parser\Attributes\ListBetween;
 use Lexicon\Parser\Attributes\Many;
 use Lexicon\Parser\Attributes\OneOf;
 use Lexicon\Parser\Attributes\Optional;
+use Lexicon\Parser\Attributes\PrefixMany;
 use Lexicon\Parser\Attributes\SeparatedBy;
+use Lexicon\Parser\Attributes\SeparatedByRequired;
 use Lexicon\Parser\Attributes\Sequence;
 use Lexicon\Parser\Attributes\Terminal;
+use Lexicon\Parser\Part;
 use Lexicon\Parser\ParseableNodeInterface;
 use ReflectionAttribute;
 use ReflectionClass;
@@ -105,7 +108,7 @@ final class GrammarPrinter
 
         $many = $this->attribute($reflection, Many::class);
         if ($many instanceof Many) {
-            return sprintf('%s*', $this->nodeName($many->node));
+            return sprintf('%s*', $this->manyNodeName($many->node));
         }
 
         $separatedBy = $this->attribute($reflection, SeparatedBy::class);
@@ -115,6 +118,16 @@ final class GrammarPrinter
                 $this->nodeName($separatedBy->node),
                 $this->terminalName($separatedBy->separator),
                 $this->nodeName($separatedBy->node)
+            );
+        }
+
+        $separatedByRequired = $this->attribute($reflection, SeparatedByRequired::class);
+        if ($separatedByRequired instanceof SeparatedByRequired) {
+            return sprintf(
+                '%s (%s %s)*',
+                $this->nodeName($separatedByRequired->node),
+                $this->terminalName($separatedByRequired->separator),
+                $this->nodeName($separatedByRequired->node)
             );
         }
 
@@ -128,9 +141,20 @@ final class GrammarPrinter
             );
         }
 
-        $sequence = $this->attribute($reflection, Sequence::class);
-        if ($sequence instanceof Sequence) {
-            return implode(' ', array_map($this->sequencePart(...), $sequence->parts));
+        $sequences = $this->attributes($reflection, Sequence::class);
+        if ($sequences !== []) {
+            $alternatives = [];
+            foreach ($sequences as $sequence) {
+                $parts = array_map($this->sequencePart(...), $sequence->parts);
+                $prefixMany = $this->attribute($reflection, PrefixMany::class);
+                if ($prefixMany instanceof PrefixMany) {
+                    array_unshift($parts, sprintf('%s*', $this->nodeName($prefixMany->node)));
+                }
+
+                $alternatives[] = implode(' ', $parts);
+            }
+
+            return implode(' | ', $alternatives);
         }
 
         $unsupported = $this->unsupportedParserAttribute($reflection);
@@ -159,6 +183,20 @@ final class GrammarPrinter
         }
 
         return $attributes[0]->newInstance();
+    }
+
+    /**
+     * @template T of object
+     * @param ReflectionClass<object> $reflection
+     * @param class-string<T> $attributeClass
+     * @return list<T>
+     */
+    private function attributes(ReflectionClass $reflection, string $attributeClass): array
+    {
+        return array_map(
+            fn (\ReflectionAttribute $attribute): object => $attribute->newInstance(),
+            $reflection->getAttributes($attributeClass)
+        );
     }
 
     /**
@@ -194,7 +232,7 @@ final class GrammarPrinter
 
         $many = $this->attribute($reflection, Many::class);
         if ($many instanceof Many) {
-            return [$many->node];
+            return is_string($many->node) ? [$many->node] : $many->node;
         }
 
         $separatedBy = $this->attribute($reflection, SeparatedBy::class);
@@ -202,17 +240,32 @@ final class GrammarPrinter
             return [$separatedBy->node];
         }
 
+        $separatedByRequired = $this->attribute($reflection, SeparatedByRequired::class);
+        if ($separatedByRequired instanceof SeparatedByRequired) {
+            return [$separatedByRequired->node];
+        }
+
         $fold = $this->attribute($reflection, Fold::class);
         if ($fold instanceof Fold) {
             return [$fold->operand];
         }
 
-        $sequence = $this->attribute($reflection, Sequence::class);
-        if ($sequence instanceof Sequence) {
-            return array_values(array_filter(
-                $sequence->parts,
-                fn (mixed $part): bool => is_string($part)
-            ));
+        $sequences = $this->attributes($reflection, Sequence::class);
+        if ($sequences !== []) {
+            $dependencies = [];
+            foreach ($sequences as $sequence) {
+                array_push(
+                    $dependencies,
+                    ...$this->sequenceDependencies($sequence->parts)
+                );
+            }
+
+            $prefixMany = $this->attribute($reflection, PrefixMany::class);
+            if ($prefixMany instanceof PrefixMany) {
+                array_unshift($dependencies, $prefixMany->node);
+            }
+
+            return array_values(array_unique($dependencies));
         }
 
         return [];
@@ -221,6 +274,18 @@ final class GrammarPrinter
     private function nodeName(string $nodeClass): string
     {
         return (new ReflectionClass($nodeClass))->getShortName();
+    }
+
+    /**
+     * @param class-string<object>|non-empty-list<class-string<object>> $node
+     */
+    private function manyNodeName(string|array $node): string
+    {
+        if (is_string($node)) {
+            return $this->nodeName($node);
+        }
+
+        return sprintf('(%s)', implode(' | ', array_map($this->nodeName(...), $node)));
     }
 
     private function terminalName(UnitEnum $terminal): string
@@ -241,7 +306,29 @@ final class GrammarPrinter
     }
 
     /**
-     * @param UnitEnum|class-string<object>|non-empty-list<UnitEnum> $part
+     * @param list<mixed> $parts
+     * @return list<class-string<object>>
+     */
+    private function sequenceDependencies(array $parts): array
+    {
+        $dependencies = [];
+
+        foreach ($parts as $part) {
+            if (is_string($part)) {
+                $dependencies[] = $part;
+                continue;
+            }
+
+            if (is_array($part) && ($part[0] ?? null) instanceof Part) {
+                array_push($dependencies, ...$this->sequenceDependencies(array_slice($part, 1)));
+            }
+        }
+
+        return $dependencies;
+    }
+
+    /**
+     * @param UnitEnum|class-string<object>|non-empty-list<UnitEnum>|array{0: Part, ...} $part
      */
     private function sequencePart(UnitEnum|string|array $part): string
     {
@@ -253,7 +340,57 @@ final class GrammarPrinter
             return $this->nodeName($part);
         }
 
+        $first = $part[0];
+        if ($first instanceof Part) {
+            return $this->partDescriptor($first, array_slice($part, 1));
+        }
+
         return sprintf('(%s)', $this->terminalNames($part));
+    }
+
+    /**
+     * @param list<mixed> $arguments
+     */
+    private function partDescriptor(Part $part, array $arguments): string
+    {
+        return match ($part) {
+            Part::Optional => sprintf('%s?', $this->sequencePart($arguments[0])),
+            Part::Many => sprintf('%s*', $this->sequencePart($arguments[0])),
+            Part::SeparatedBy => sprintf(
+                '(%s (%s %s)*)?',
+                $this->sequencePart($arguments[0]),
+                $this->terminalName($arguments[1]),
+                $this->sequencePart($arguments[0])
+            ),
+            Part::SeparatedByRequired => sprintf(
+                '%s (%s %s)*',
+                $this->sequencePart($arguments[0]),
+                $this->terminalName($arguments[1]),
+                $this->sequencePart($arguments[0])
+            ),
+            Part::ListBetween => sprintf(
+                '%s (%s (%s %s)*)? %s',
+                $this->terminalName($arguments[2]),
+                $this->sequencePart($arguments[0]),
+                $this->terminalName($arguments[1]),
+                $this->sequencePart($arguments[0]),
+                $this->terminalName($arguments[3])
+            ),
+            Part::ManyUntil => sprintf(
+                '%s* /* until %s */',
+                $this->sequencePart($arguments[0]),
+                $this->terminalNames($arguments[1])
+            ),
+            Part::ManyUntilRequired => sprintf(
+                '%s+ /* until %s */',
+                $this->sequencePart($arguments[0]),
+                $this->terminalNames($arguments[1])
+            ),
+            Part::OptionalSequence => sprintf(
+                '(%s)?',
+                implode(' ', array_map($this->sequencePart(...), $arguments))
+            ),
+        };
     }
 
     /**
@@ -276,7 +413,9 @@ final class GrammarPrinter
                 Many::class,
                 OneOf::class,
                 Optional::class,
+                PrefixMany::class,
                 SeparatedBy::class,
+                SeparatedByRequired::class,
                 Sequence::class,
                 Terminal::class,
             ], true)) {

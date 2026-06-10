@@ -62,4 +62,16 @@ TXT), $tree);
 
         self::assertSame('JsonStringNode "\"very ve..."', $tree);
     }
+
+    public function testAstPrinterCanColorNodeNames(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('1 + 2');
+        $node = Parser::fromTokens($tokens)->parse(AddExpressionNode::class);
+
+        $tree = AstPrinter::format($node, color: true);
+
+        self::assertStringContainsString("\033[1;36mAddExpressionNode\033[0m", $tree);
+        self::assertStringContainsString("\033[2moperator: \033[0m\033[33mPlus\033[0m \033[33m\"+\"\033[0m", $tree);
+        self::assertStringContainsString("\033[2mleft: \033[0m\033[1;36mIntegerNode\033[0m \033[35m\"1\"\033[0m", $tree);
+    }
 }

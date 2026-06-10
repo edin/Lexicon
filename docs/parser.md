@@ -236,7 +236,7 @@ final readonly class MemberListNode
 
 ### SeparatedBy
 
-`#[SeparatedBy]` maps to `A ("," A)*` and forwards `list<A>` to the constructor:
+`#[SeparatedBy]` maps to `(A ("," A)*)?` and forwards `list<A>` to the constructor:
 
 ```php
 use Lexicon\Parser\Attributes\SeparatedBy;
@@ -250,6 +250,29 @@ final readonly class ArgumentListNode
 {
     /**
      * @param list<ArgumentNode> $arguments
+     */
+    public function __construct(public array $arguments)
+    {
+    }
+}
+```
+
+### SeparatedByRequired
+
+`#[SeparatedByRequired]` maps to `A ("," A)*` and forwards a non-empty list to the constructor:
+
+```php
+use Lexicon\Parser\Attributes\SeparatedByRequired;
+
+#[SeparatedByRequired(
+    ArgumentNode::class,
+    MyToken::Comma,
+    allowTrailingSeparator: true
+)]
+final readonly class ArgumentListNode
+{
+    /**
+     * @param non-empty-list<ArgumentNode> $arguments
      */
     public function __construct(public array $arguments)
     {
@@ -341,7 +364,8 @@ A | B | C             #[OneOf([...])]
 "(" A ")"             #[Between(...)]
 A?                    #[Optional(...)]
 A*                    #[Many(...)]
-A ("," A)*            #[SeparatedBy(...)]
+(A ("," A)*)?         #[SeparatedBy(...)]
+A ("," A)*            #[SeparatedByRequired(...)]
 "(" A ("," A)* ")"    #[ListBetween(...)]
 A B C                 #[Sequence(...)]
 A (op A)*             #[Fold(...)]

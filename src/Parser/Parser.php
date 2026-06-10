@@ -12,7 +12,9 @@ use Lexicon\Parser\Attributes\ListBetween as ListBetweenAttribute;
 use Lexicon\Parser\Attributes\Many as ManyAttribute;
 use Lexicon\Parser\Attributes\OneOf as OneOfAttribute;
 use Lexicon\Parser\Attributes\Optional as OptionalAttribute;
+use Lexicon\Parser\Attributes\PrefixMany;
 use Lexicon\Parser\Attributes\SeparatedBy as SeparatedByAttribute;
+use Lexicon\Parser\Attributes\SeparatedByRequired as SeparatedByRequiredAttribute;
 use Lexicon\Parser\Attributes\Sequence as SequenceAttribute;
 use Lexicon\Parser\Attributes\Terminal as TerminalAttribute;
 use InvalidArgumentException;
@@ -66,6 +68,13 @@ final class Parser
     {
         $reflection = new ReflectionClass($nodeClass);
 
+        foreach ($reflection->getAttributes() as $attribute) {
+            $instance = $attribute->newInstance();
+            if ($instance instanceof ParserAttributeInterface) {
+                return $instance->parse($this, $reflection, $report);
+            }
+        }
+
         $oneOfAttributes = $reflection->getAttributes(OneOfAttribute::class);
         if ($oneOfAttributes !== []) {
             return $this->parseOneOf($oneOfAttributes[0]->newInstance(), $report);
@@ -101,9 +110,18 @@ final class Parser
             return $this->parseSeparatedByAttribute($reflection, $separatedByAttributes[0]->newInstance());
         }
 
+        $separatedByRequiredAttributes = $reflection->getAttributes(SeparatedByRequiredAttribute::class);
+        if ($separatedByRequiredAttributes !== []) {
+            return $this->parseSeparatedByRequiredAttribute(
+                $reflection,
+                $separatedByRequiredAttributes[0]->newInstance(),
+                $report
+            );
+        }
+
         $sequenceAttributes = $reflection->getAttributes(SequenceAttribute::class);
         if ($sequenceAttributes !== []) {
-            return $this->parseSequenceAttribute($reflection, $sequenceAttributes[0]->newInstance(), $report);
+            return $this->parseSequenceAlternatives($reflection, $sequenceAttributes, $report);
         }
 
         $foldAttributes = $reflection->getAttributes(Fold::class);
@@ -138,6 +156,16 @@ final class Parser
         $this->diagnostics->report($current->location, $message);
 
         return $current;
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $nodeClass
+     * @return T|null
+     */
+    public function tryParse(string $nodeClass): ?object
+    {
+        return $this->parseNode($nodeClass, report: false);
     }
 
     /**
@@ -210,6 +238,36 @@ final class Parser
 
     /**
      * @template T
+     * @param callable(self): ?T $parser
+     * @param UnitEnum|non-empty-list<UnitEnum> $stop
+     * @return list<T>
+     */
+    public function manyUntil(callable $parser, UnitEnum|array $stop): array
+    {
+        $stop = $this->normalizeTokens($stop);
+        $items = [];
+
+        while (!$this->tokens->isAtEnd() && !$this->tokens->checkAny($stop)) {
+            $position = $this->tokens->save();
+            $result = $parser($this);
+
+            if ($result === null) {
+                $this->tokens->restore($position);
+                break;
+            }
+
+            $items[] = $result;
+
+            if ($this->tokens->save() === $position) {
+                throw new LogicException('Parser manyUntil() parser must consume at least one token.');
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * @template T
      * @param callable(self): T $parser
      * @return T
      */
@@ -245,6 +303,54 @@ final class Parser
         $items = [$first];
 
         while ($this->tokens->match($separator) !== null) {
+            $item = $this->optional($parser);
+            if ($item === null) {
+                if (!$allowTrailingSeparator) {
+                    $this->diagnostics->report($this->tokens->current()->location, 'Expected item after separator.');
+                }
+
+                break;
+            }
+
+            $items[] = $item;
+        }
+
+        return $items;
+    }
+
+    /**
+     * @template T
+     * @param callable(self): ?T $parser
+     * @return list<T>
+     */
+    public function delimited(
+        callable $parser,
+        UnitEnum $separator,
+        UnitEnum $close,
+        bool $allowTrailingSeparator = true
+    ): array {
+        $items = [];
+
+        if ($this->tokens->check($close)) {
+            return $items;
+        }
+
+        $first = $this->optional($parser);
+        if ($first === null) {
+            return $items;
+        }
+
+        $items[] = $first;
+
+        while ($this->tokens->match($separator) !== null) {
+            if ($this->tokens->check($close)) {
+                if (!$allowTrailingSeparator) {
+                    $this->diagnostics->report($this->tokens->current()->location, 'Expected item after separator.');
+                }
+
+                break;
+            }
+
             $item = $this->optional($parser);
             if ($item === null) {
                 if (!$allowTrailingSeparator) {
@@ -475,10 +581,33 @@ final class Parser
     private function parseManyAttribute(ReflectionClass $nodeClass, ManyAttribute $many): object
     {
         $items = $this->many(
-            fn (self $parser): ?object => $parser->parseNode($many->node, report: false)
+            fn (self $parser): ?object => $parser->parseManyNode($many->node)
         );
 
         return $nodeClass->newInstance($items);
+    }
+
+    /**
+     * @param class-string<object>|non-empty-list<class-string<object>> $node
+     */
+    private function parseManyNode(string|array $node): ?object
+    {
+        if (is_string($node)) {
+            return $this->parseNode($node, report: false);
+        }
+
+        foreach ($node as $nodeClass) {
+            $position = $this->tokens->save();
+            $parsed = $this->parseNode($nodeClass, report: false);
+
+            if ($parsed !== null) {
+                return $parsed;
+            }
+
+            $this->tokens->restore($position);
+        }
+
+        return null;
     }
 
     /**
@@ -502,42 +631,121 @@ final class Parser
      * @param ReflectionClass<T> $nodeClass
      * @return T|null
      */
-    private function parseSequenceAttribute(
+    private function parseSeparatedByRequiredAttribute(
         ReflectionClass $nodeClass,
-        SequenceAttribute $sequence,
+        SeparatedByRequiredAttribute $separatedBy,
         bool $report
     ): ?object {
         $position = $this->tokens->save();
-        $values = [];
+        $items = $this->separatedBy(
+            fn (self $parser): ?object => $parser->parseNode($separatedBy->node, report: false),
+            $separatedBy->separator,
+            $separatedBy->allowTrailingSeparator
+        );
+
+        if ($items === []) {
+            $this->tokens->restore($position);
+
+            if (!$report) {
+                return null;
+            }
+
+            $items = [$this->parseNode($separatedBy->node, report: true)];
+        }
+
+        return $nodeClass->newInstance($items);
+    }
+
+    /**
+     * @template T of object
+     * @param ReflectionClass<T> $nodeClass
+     * @param list<\ReflectionAttribute<SequenceAttribute>> $sequenceAttributes
+     * @param list<mixed> $prefixValues
+     * @return T|null
+     */
+    public function parseSequenceAlternatives(
+        ReflectionClass $nodeClass,
+        array $sequenceAttributes,
+        bool $report,
+        array $prefixValues = []
+    ): ?object
+    {
+        $position = $this->tokens->save();
+
+        foreach ($sequenceAttributes as $sequenceAttribute) {
+            $this->tokens->restore($position);
+            $node = $this->parseSequence($nodeClass, $sequenceAttribute->newInstance(), false, $prefixValues);
+
+            if ($node !== null) {
+                return $node;
+            }
+        }
+
+        $this->tokens->restore($position);
+
+        if ($report) {
+            return $this->parseSequence($nodeClass, $sequenceAttributes[0]->newInstance(), true, $prefixValues);
+        }
+
+        return null;
+    }
+
+    /**
+     * @template T of object
+     * @param ReflectionClass<T> $nodeClass
+     * @param list<mixed> $prefixValues
+     * @return T|null
+     */
+    public function parseSequence(
+        ReflectionClass $nodeClass,
+        SequenceAttribute $sequence,
+        bool $report,
+        array $prefixValues = []
+    ): ?object {
+        $position = $this->tokens->save();
+        $values = $prefixValues;
 
         foreach ($sequence->parts as $part) {
-            $value = $this->parseSequencePart($part, $report);
+            $result = $this->parsePart($part, $report);
 
-            if ($value === null) {
+            if (!$result->matched) {
                 $this->tokens->restore($position);
 
                 return null;
             }
 
-            $values[] = $value;
+            $values[] = $result->value;
+        }
+
+        if ($sequence->factory !== null) {
+            return $nodeClass->getMethod($sequence->factory)->invoke(null, ...$values);
         }
 
         return $nodeClass->newInstanceArgs($values);
     }
 
     /**
-     * @param UnitEnum|class-string<object>|non-empty-list<UnitEnum> $part
+     * @param UnitEnum|class-string<object>|non-empty-list<UnitEnum>|array{0: Part, ...} $part
      */
-    private function parseSequencePart(UnitEnum|string|array $part, bool $report): ?object
+    public function parsePart(UnitEnum|string|array $part, bool $report): ParseResult
     {
         if ($part instanceof UnitEnum) {
-            return $report
+            $token = $report
                 ? $this->expect($part, sprintf('Expected %s.', $part->name))
                 : $this->tokens->match($part);
+
+            return $token === null ? ParseResult::noMatch() : ParseResult::match($token);
         }
 
         if (is_string($part)) {
-            return $this->parseNode($part, $report);
+            $node = $this->parseNode($part, $report);
+
+            return $node === null ? ParseResult::noMatch() : ParseResult::match($node);
+        }
+
+        $first = $part[0];
+        if ($first instanceof Part) {
+            return $first->parse($this, $report, array_slice($part, 1));
         }
 
         return $this->parseSequenceTerminalChoice($part, $report);
@@ -546,11 +754,15 @@ final class Parser
     /**
      * @param non-empty-list<UnitEnum> $terminals
      */
-    private function parseSequenceTerminalChoice(array $terminals, bool $report): ?Token
+    private function parseSequenceTerminalChoice(array $terminals, bool $report): ParseResult
     {
         $match = $this->matchAny($terminals);
-        if ($match !== null || !$report) {
-            return $match;
+        if ($match !== null) {
+            return ParseResult::match($match);
+        }
+
+        if (!$report) {
+            return ParseResult::noMatch();
         }
 
         $this->diagnostics->report(
@@ -561,7 +773,7 @@ final class Parser
             )))
         );
 
-        return $this->tokens->current();
+        return ParseResult::match($this->tokens->current());
     }
 
     /**
@@ -570,21 +782,33 @@ final class Parser
      */
     private function normalizeOperators(UnitEnum|array $operators): array
     {
-        if ($operators instanceof UnitEnum) {
-            return [$operators];
+        return $this->normalizeTokens($operators, 'Parser fold requires at least one operator.', 'Parser fold operators must be enum cases.');
+    }
+
+    /**
+     * @param UnitEnum|array<array-key, mixed> $tokens
+     * @return non-empty-list<UnitEnum>
+     */
+    private function normalizeTokens(
+        UnitEnum|array $tokens,
+        string $emptyMessage = 'Expected at least one token.',
+        string $invalidMessage = 'Expected enum cases.'
+    ): array {
+        if ($tokens instanceof UnitEnum) {
+            return [$tokens];
         }
 
-        if ($operators === []) {
-            throw new InvalidArgumentException('Parser fold requires at least one operator.');
+        if ($tokens === []) {
+            throw new InvalidArgumentException($emptyMessage);
         }
 
         $normalized = [];
-        foreach ($operators as $operator) {
-            if (!$operator instanceof UnitEnum) {
-                throw new InvalidArgumentException('Parser fold operators must be enum cases.');
+        foreach ($tokens as $token) {
+            if (!$token instanceof UnitEnum) {
+                throw new InvalidArgumentException($invalidMessage);
             }
 
-            $normalized[] = $operator;
+            $normalized[] = $token;
         }
 
         return $normalized;
@@ -595,13 +819,6 @@ final class Parser
      */
     private function matchAny(array $operators): ?Token
     {
-        foreach ($operators as $operator) {
-            $match = $this->tokens->match($operator);
-            if ($match !== null) {
-                return $match;
-            }
-        }
-
-        return null;
+        return $this->tokens->matchAny($operators);
     }
 }

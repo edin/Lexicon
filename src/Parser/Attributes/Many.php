@@ -10,9 +10,9 @@ use Attribute;
 final readonly class Many
 {
     /**
-     * @param class-string<object> $node
+     * @param class-string<object>|non-empty-list<class-string<object>> $node
      */
-    public function __construct(public string $node)
+    public function __construct(public string|array $node)
     {
     }
 }

@@ -5,15 +5,17 @@ declare(strict_types=1);
 namespace Lexicon\Parser\Attributes;
 
 use Attribute;
-use UnitEnum;
 
-#[Attribute(Attribute::TARGET_CLASS)]
+#[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
 final readonly class Sequence
 {
     /**
-     * @param non-empty-list<UnitEnum|class-string<object>|non-empty-list<UnitEnum>> $parts
+     * @param non-empty-list<mixed> $parts
      */
-    public function __construct(public array $parts)
+    public function __construct(
+        public array $parts,
+        public ?string $factory = null
+    )
     {
     }
 }

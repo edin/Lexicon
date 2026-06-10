@@ -9,9 +9,15 @@ use Lexicon\Tests\Fixtures\AddExpressionNode;
 use Lexicon\Tests\Fixtures\AttributeExpressionNodeInterface;
 use Lexicon\Tests\Fixtures\AttributeGrammarNode;
 use Lexicon\Tests\Fixtures\AttributeIntegerListNode;
+use Lexicon\Tests\Fixtures\AttributeIntegerOrSignedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeManyIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeManyIntegerOrSignedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeOptionalIntegerNode;
+use Lexicon\Tests\Fixtures\AttributePartIntegerListNode;
+use Lexicon\Tests\Fixtures\AttributePartOptionalIntegerNode;
+use Lexicon\Tests\Fixtures\AttributePrefixedSignedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeSeparatedIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeSeparatedRequiredIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeGroupedSequenceNode;
 use Lexicon\Tests\Fixtures\AttributeSignedIntegerNode;
 use PHPUnit\Framework\TestCase;
@@ -72,11 +78,53 @@ final class GrammarPrinterTest extends TestCase
         ]), GrammarPrinter::format(AttributeManyIntegerNode::class));
 
         self::assertSame(implode(PHP_EOL, [
+            'Start ::= AttributeManyIntegerOrSignedIntegerNode',
+            '',
+            'AttributeManyIntegerOrSignedIntegerNode ::= (AttributeIntegerNode | AttributeSignedIntegerNode)*',
+            'AttributeIntegerNode ::= Integer',
+            'AttributeSignedIntegerNode ::= (Plus | Minus) AttributeIntegerNode',
+        ]), GrammarPrinter::format(AttributeManyIntegerOrSignedIntegerNode::class));
+
+        self::assertSame(implode(PHP_EOL, [
             'Start ::= AttributeSeparatedIntegerNode',
             '',
             'AttributeSeparatedIntegerNode ::= (AttributeIntegerNode (Comma AttributeIntegerNode)*)?',
             'AttributeIntegerNode ::= Integer',
         ]), GrammarPrinter::format(AttributeSeparatedIntegerNode::class));
+
+        self::assertSame(implode(PHP_EOL, [
+            'Start ::= AttributeSeparatedRequiredIntegerNode',
+            '',
+            'AttributeSeparatedRequiredIntegerNode ::= AttributeIntegerNode (Comma AttributeIntegerNode)*',
+            'AttributeIntegerNode ::= Integer',
+        ]), GrammarPrinter::format(AttributeSeparatedRequiredIntegerNode::class));
+    }
+
+    public function testGrammarPrinterFormatsRepeatableSequenceAttributes(): void
+    {
+        self::assertSame(implode(PHP_EOL, [
+            'Start ::= AttributeIntegerOrSignedIntegerNode',
+            '',
+            'AttributeIntegerOrSignedIntegerNode ::= AttributeIntegerNode | (Plus | Minus) AttributeIntegerNode',
+            'AttributeIntegerNode ::= Integer',
+        ]), GrammarPrinter::format(AttributeIntegerOrSignedIntegerNode::class));
+    }
+
+    public function testGrammarPrinterFormatsInlinePartDescriptors(): void
+    {
+        self::assertSame(implode(PHP_EOL, [
+            'Start ::= AttributePartOptionalIntegerNode',
+            '',
+            'AttributePartOptionalIntegerNode ::= AttributeIntegerNode? Plus',
+            'AttributeIntegerNode ::= Integer',
+        ]), GrammarPrinter::format(AttributePartOptionalIntegerNode::class));
+
+        self::assertSame(implode(PHP_EOL, [
+            'Start ::= AttributePartIntegerListNode',
+            '',
+            'AttributePartIntegerListNode ::= OpenParen (AttributeIntegerNode (Comma AttributeIntegerNode)*)? CloseParen',
+            'AttributeIntegerNode ::= Integer',
+        ]), GrammarPrinter::format(AttributePartIntegerListNode::class));
     }
 
     public function testGrammarPrinterUsesGrammarAttributeForCustomNodes(): void
@@ -107,5 +155,15 @@ final class GrammarPrinterTest extends TestCase
             'AttributeSignedIntegerNode ::= (Plus | Minus) AttributeIntegerNode',
             'AttributeIntegerNode ::= Integer',
         ]), GrammarPrinter::format(AttributeSignedIntegerNode::class));
+    }
+
+    public function testGrammarPrinterFormatsPrefixManyWithSequenceRecipe(): void
+    {
+        self::assertSame(implode(PHP_EOL, [
+            'Start ::= AttributePrefixedSignedIntegerNode',
+            '',
+            'AttributePrefixedSignedIntegerNode ::= AttributeIntegerNode* (Plus | Minus) AttributeIntegerNode',
+            'AttributeIntegerNode ::= Integer',
+        ]), GrammarPrinter::format(AttributePrefixedSignedIntegerNode::class));
     }
 }
