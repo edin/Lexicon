@@ -6,17 +6,7 @@ namespace Lexicon\Parser;
 
 use Lexicon\Lexer\DiagnosticBag;
 use Lexicon\Lexer\Token;
-use Lexicon\Parser\Attributes\Between as BetweenAttribute;
-use Lexicon\Parser\Attributes\Fold;
-use Lexicon\Parser\Attributes\ListBetween as ListBetweenAttribute;
-use Lexicon\Parser\Attributes\Many as ManyAttribute;
-use Lexicon\Parser\Attributes\OneOf as OneOfAttribute;
-use Lexicon\Parser\Attributes\Optional as OptionalAttribute;
-use Lexicon\Parser\Attributes\PrefixMany;
-use Lexicon\Parser\Attributes\SeparatedBy as SeparatedByAttribute;
-use Lexicon\Parser\Attributes\SeparatedByRequired as SeparatedByRequiredAttribute;
 use Lexicon\Parser\Attributes\Sequence as SequenceAttribute;
-use Lexicon\Parser\Attributes\Terminal as TerminalAttribute;
 use InvalidArgumentException;
 use LogicException;
 use ReflectionClass;
@@ -26,22 +16,24 @@ final class Parser
 {
     public readonly TokenStream $tokens;
     public readonly DiagnosticBag $diagnostics;
+    public readonly ParsletFactoryInterface $parslets;
 
     /**
      * @param non-empty-list<Token> $tokens
      */
-    private function __construct(array $tokens)
+    private function __construct(array $tokens, ?ParsletFactoryInterface $parslets = null)
     {
         $this->tokens = new TokenStream($tokens);
         $this->diagnostics = new DiagnosticBag();
+        $this->parslets = $parslets ?? new DefaultParsletFactory();
     }
 
     /**
      * @param non-empty-list<Token> $tokens
      */
-    public static function fromTokens(array $tokens): self
+    public static function fromTokens(array $tokens, ?ParsletFactoryInterface $parslets = null): self
     {
-        return new self($tokens);
+        return new self($tokens, $parslets);
     }
 
     /**
@@ -64,74 +56,12 @@ final class Parser
      * @param class-string<T> $nodeClass
      * @return T|null
      */
-    private function parseNode(string $nodeClass, bool $report): ?object
+    public function parseNode(string $nodeClass, bool $report): ?object
     {
         $reflection = new ReflectionClass($nodeClass);
-
-        foreach ($reflection->getAttributes() as $attribute) {
-            $instance = $attribute->newInstance();
-            if ($instance instanceof ParserAttributeInterface) {
-                return $instance->parse($this, $reflection, $report);
-            }
-        }
-
-        $oneOfAttributes = $reflection->getAttributes(OneOfAttribute::class);
-        if ($oneOfAttributes !== []) {
-            return $this->parseOneOf($oneOfAttributes[0]->newInstance(), $report);
-        }
-
-        $terminalAttributes = $reflection->getAttributes(TerminalAttribute::class);
-        if ($terminalAttributes !== []) {
-            return $this->parseTerminal($reflection, $terminalAttributes[0]->newInstance(), $report);
-        }
-
-        $betweenAttributes = $reflection->getAttributes(BetweenAttribute::class);
-        if ($betweenAttributes !== []) {
-            return $this->parseBetweenAttribute($reflection, $betweenAttributes[0]->newInstance(), $report);
-        }
-
-        $listBetweenAttributes = $reflection->getAttributes(ListBetweenAttribute::class);
-        if ($listBetweenAttributes !== []) {
-            return $this->parseListBetween($reflection, $listBetweenAttributes[0]->newInstance(), $report);
-        }
-
-        $optionalAttributes = $reflection->getAttributes(OptionalAttribute::class);
-        if ($optionalAttributes !== []) {
-            return $this->parseOptionalAttribute($reflection, $optionalAttributes[0]->newInstance());
-        }
-
-        $manyAttributes = $reflection->getAttributes(ManyAttribute::class);
-        if ($manyAttributes !== []) {
-            return $this->parseManyAttribute($reflection, $manyAttributes[0]->newInstance());
-        }
-
-        $separatedByAttributes = $reflection->getAttributes(SeparatedByAttribute::class);
-        if ($separatedByAttributes !== []) {
-            return $this->parseSeparatedByAttribute($reflection, $separatedByAttributes[0]->newInstance());
-        }
-
-        $separatedByRequiredAttributes = $reflection->getAttributes(SeparatedByRequiredAttribute::class);
-        if ($separatedByRequiredAttributes !== []) {
-            return $this->parseSeparatedByRequiredAttribute(
-                $reflection,
-                $separatedByRequiredAttributes[0]->newInstance(),
-                $report
-            );
-        }
-
-        $sequenceAttributes = $reflection->getAttributes(SequenceAttribute::class);
-        if ($sequenceAttributes !== []) {
-            return $this->parseSequenceAlternatives($reflection, $sequenceAttributes, $report);
-        }
-
-        $foldAttributes = $reflection->getAttributes(Fold::class);
-
-        if ($foldAttributes !== []) {
-            return $this->parseFold($reflection, $foldAttributes[0]->newInstance());
-        }
-
-        if (is_subclass_of($nodeClass, ParseableNodeInterface::class)) {
-            return $nodeClass::parse($this);
+        $parslet = $this->parslets->forNode($reflection);
+        if ($parslet !== null) {
+            return $parslet->parse($this, $reflection, $report);
         }
 
         if (!$report) {
@@ -455,142 +385,9 @@ final class Parser
     }
 
     /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T
-     */
-    private function parseFold(ReflectionClass $nodeClass, Fold $fold): object
-    {
-        return $this->fold(
-            $fold->operators,
-            fn (self $parser): object => $parser->parse($fold->operand),
-            fn (Token $operator, object $left, object $right): object => $nodeClass->newInstance($operator, $left, $right),
-            $fold->associativity
-        );
-    }
-
-    /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T|null
-     */
-    private function parseTerminal(ReflectionClass $nodeClass, TerminalAttribute $terminal, bool $report): ?object
-    {
-        $match = $report
-            ? $this->expect($terminal->type, $terminal->message)
-            : $this->tokens->match($terminal->type);
-
-        if ($match === null) {
-            return null;
-        }
-
-        return $nodeClass->newInstance($match);
-    }
-
-    private function parseOneOf(OneOfAttribute $oneOf, bool $report): ?object
-    {
-        foreach ($oneOf->nodes as $nodeClass) {
-            $position = $this->tokens->save();
-            $node = $this->parseNode($nodeClass, report: false);
-
-            if ($node !== null) {
-                return $node;
-            }
-
-            $this->tokens->restore($position);
-        }
-
-        if ($report) {
-            $this->diagnostics->report($this->tokens->current()->location, $oneOf->message);
-        }
-
-        return null;
-    }
-
-    /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T|null
-     */
-    private function parseBetweenAttribute(
-        ReflectionClass $nodeClass,
-        BetweenAttribute $between,
-        bool $report
-    ): ?object {
-        if (!$report && !$this->tokens->check($between->open)) {
-            return null;
-        }
-
-        $node = $this->between(
-            $between->open,
-            fn (self $parser): object => $parser->parse($between->node),
-            $between->close,
-            $between->openMessage,
-            $between->closeMessage
-        );
-
-        return $nodeClass->newInstance($node);
-    }
-
-    /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T|null
-     */
-    private function parseListBetween(
-        ReflectionClass $nodeClass,
-        ListBetweenAttribute $listBetween,
-        bool $report
-    ): ?object {
-        if (!$report && !$this->tokens->check($listBetween->open)) {
-            return null;
-        }
-
-        $items = $this->listBetween(
-            $listBetween->open,
-            fn (self $parser): ?object => $parser->parseNode($listBetween->item, report: false),
-            $listBetween->separator,
-            $listBetween->close,
-            $listBetween->allowTrailingSeparator,
-            $listBetween->openMessage,
-            $listBetween->closeMessage
-        );
-
-        return $nodeClass->newInstance($items);
-    }
-
-    /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T
-     */
-    private function parseOptionalAttribute(ReflectionClass $nodeClass, OptionalAttribute $optional): object
-    {
-        $node = $this->optional(
-            fn (self $parser): ?object => $parser->parseNode($optional->node, report: false)
-        );
-
-        return $nodeClass->newInstance($node);
-    }
-
-    /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T
-     */
-    private function parseManyAttribute(ReflectionClass $nodeClass, ManyAttribute $many): object
-    {
-        $items = $this->many(
-            fn (self $parser): ?object => $parser->parseManyNode($many->node)
-        );
-
-        return $nodeClass->newInstance($items);
-    }
-
-    /**
      * @param class-string<object>|non-empty-list<class-string<object>> $node
      */
-    private function parseManyNode(string|array $node): ?object
+    public function parseManyNode(string|array $node): ?object
     {
         if (is_string($node)) {
             return $this->parseNode($node, report: false);
@@ -608,52 +405,6 @@ final class Parser
         }
 
         return null;
-    }
-
-    /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T
-     */
-    private function parseSeparatedByAttribute(ReflectionClass $nodeClass, SeparatedByAttribute $separatedBy): object
-    {
-        $items = $this->separatedBy(
-            fn (self $parser): ?object => $parser->parseNode($separatedBy->node, report: false),
-            $separatedBy->separator,
-            $separatedBy->allowTrailingSeparator
-        );
-
-        return $nodeClass->newInstance($items);
-    }
-
-    /**
-     * @template T of object
-     * @param ReflectionClass<T> $nodeClass
-     * @return T|null
-     */
-    private function parseSeparatedByRequiredAttribute(
-        ReflectionClass $nodeClass,
-        SeparatedByRequiredAttribute $separatedBy,
-        bool $report
-    ): ?object {
-        $position = $this->tokens->save();
-        $items = $this->separatedBy(
-            fn (self $parser): ?object => $parser->parseNode($separatedBy->node, report: false),
-            $separatedBy->separator,
-            $separatedBy->allowTrailingSeparator
-        );
-
-        if ($items === []) {
-            $this->tokens->restore($position);
-
-            if (!$report) {
-                return null;
-            }
-
-            $items = [$this->parseNode($separatedBy->node, report: true)];
-        }
-
-        return $nodeClass->newInstance($items);
     }
 
     /**

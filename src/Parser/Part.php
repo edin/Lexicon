@@ -11,6 +11,7 @@ enum Part
 {
     case Optional;
     case Many;
+    case OneOrMore;
     case SeparatedBy;
     case SeparatedByRequired;
     case ListBetween;
@@ -26,6 +27,7 @@ enum Part
         return match ($this) {
             self::Optional => $this->parseOptional($parser, $arguments),
             self::Many => $this->parseMany($parser, $arguments),
+            self::OneOrMore => $this->parseOneOrMore($parser, $arguments),
             self::SeparatedBy => $this->parseSeparatedBy($parser, $arguments),
             self::SeparatedByRequired => $this->parseSeparatedByRequired($parser, $arguments),
             self::ListBetween => $this->parseListBetween($parser, $report, $arguments),
@@ -63,6 +65,16 @@ enum Part
         return ParseResult::match($parser->many(
             fn (Parser $parser): mixed => $this->parseItem($parser, $part)
         ));
+    }
+
+    /**
+     * @param list<mixed> $arguments
+     */
+    private function parseOneOrMore(Parser $parser, array $arguments): ParseResult
+    {
+        $items = $this->parseMany($parser, $arguments)->value;
+
+        return $items === [] ? ParseResult::noMatch() : ParseResult::match($items);
     }
 
     /**

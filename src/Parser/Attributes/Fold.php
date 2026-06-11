@@ -6,10 +6,14 @@ namespace Lexicon\Parser\Attributes;
 
 use Attribute;
 use Lexicon\Parser\Associativity;
+use Lexicon\Parser\ParsletFactoryInterface;
+use Lexicon\Parser\ParsletInterface;
+use Lexicon\Parser\ParsletProviderInterface;
+use Lexicon\Parser\Parslets\FoldParslet;
 use UnitEnum;
 
 #[Attribute(Attribute::TARGET_CLASS)]
-final readonly class Fold
+final readonly class Fold implements ParsletProviderInterface
 {
     /**
      * @param UnitEnum|non-empty-list<UnitEnum> $operators
@@ -21,5 +25,10 @@ final readonly class Fold
         public Associativity $associativity = Associativity::Left
     )
     {
+    }
+
+    public function parslet(ParsletFactoryInterface $factory): ParsletInterface
+    {
+        return new FoldParslet($this);
     }
 }

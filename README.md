@@ -18,6 +18,7 @@ $node = Parser::fromTokens($tokens)->parse(MyNode::class);
 - diagnostics for lexer and parser errors
 - recursive descent parser primitives
 - attribute grammar recipes: `Terminal`, `OneOf`, `Between`, `Optional`, `Many`, `SeparatedBy`, `SeparatedByRequired`, `ListBetween`, `Sequence`, `Fold`
+- reusable parser extension points with parslets and `#[Parse(...)]`
 - custom parser escape hatch with `ParseableNodeInterface`
 - token table, AST printer, and BNF grammar printer
 

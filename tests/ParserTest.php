@@ -9,7 +9,9 @@ use Lexicon\Lexer\Lexer;
 use Lexicon\Parser\Associativity;
 use Lexicon\Parser\Parser;
 use Lexicon\Tests\Fixtures\AddExpressionNode;
+use Lexicon\Tests\Fixtures\AttributeConfiguredIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeDecliningFactoryIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeDispatchedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeExpressionNodeInterface;
 use Lexicon\Tests\Fixtures\AttributeGroupedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeIntegerListNode;
@@ -20,9 +22,11 @@ use Lexicon\Tests\Fixtures\AttributeManyIntegerOrSignedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeOptionalIntegerNode;
 use Lexicon\Tests\Fixtures\AttributePartIntegerListNode;
 use Lexicon\Tests\Fixtures\AttributePartManyUntilIntegerNode;
+use Lexicon\Tests\Fixtures\AttributePartOneOrMoreIntegerNode;
 use Lexicon\Tests\Fixtures\AttributePartOptionalIntegerNode;
 use Lexicon\Tests\Fixtures\AttributePartOptionalSignedIntegerSequenceNode;
 use Lexicon\Tests\Fixtures\AttributePartRequiredSeparatedIntegerNode;
+use Lexicon\Tests\Fixtures\AttributeParsedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributePrefixedSignedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeSeparatedIntegerNode;
 use Lexicon\Tests\Fixtures\AttributeSeparatedRequiredIntegerNode;
@@ -107,6 +111,40 @@ final class ParserTest extends TestCase
         $node = $parser->parse(AttributeIntegerNode::class);
 
         self::assertInstanceOf(AttributeIntegerNode::class, $node);
+        self::assertSame('123', $node->token->value);
+    }
+
+    public function testParserCanUseParseAttributeWithParsletClass(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('123');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeParsedIntegerNode::class);
+
+        self::assertInstanceOf(AttributeParsedIntegerNode::class, $node);
+        self::assertSame('123', $node->token->value);
+    }
+
+    public function testParserCanUseParseAttributeWithConfiguredParsletClass(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('+');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeConfiguredIntegerNode::class);
+
+        self::assertInstanceOf(AttributeConfiguredIntegerNode::class, $node);
+        self::assertTrue($parser->diagnostics->hasErrors());
+        self::assertSame('Expected configured integer.', $parser->diagnostics->all()[0]->message);
+    }
+
+    public function testParserCanUseParseAttributeWithEnumDispatch(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('123');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributeDispatchedIntegerNode::class);
+
+        self::assertInstanceOf(AttributeDispatchedIntegerNode::class, $node);
         self::assertSame('123', $node->token->value);
     }
 
@@ -354,6 +392,33 @@ final class ParserTest extends TestCase
             $node->items
         ));
         self::assertSame(ExpressionTokenType::Plus, $node->plus->type);
+    }
+
+    public function testParserCanUseOneOrMorePartInSequenceAttribute(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('1 2 3 +');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->parse(AttributePartOneOrMoreIntegerNode::class);
+
+        self::assertInstanceOf(AttributePartOneOrMoreIntegerNode::class, $node);
+        self::assertSame(['1', '2', '3'], array_map(
+            fn (AttributeIntegerNode $node): string => $node->token->value,
+            $node->items
+        ));
+        self::assertSame(ExpressionTokenType::Plus, $node->plus->type);
+    }
+
+    public function testParserReportsWhenOneOrMorePartHasNoItems(): void
+    {
+        $tokens = Lexer::from(ExpressionTokenType::class)->scan('+');
+        $parser = Parser::fromTokens($tokens);
+
+        $node = $parser->tryParse(AttributePartOneOrMoreIntegerNode::class);
+
+        self::assertNull($node);
+        self::assertFalse($parser->diagnostics->hasErrors());
+        self::assertTrue($parser->tokens->check(ExpressionTokenType::Plus));
     }
 
     public function testParserCanUseOptionalSequencePartInSequenceAttribute(): void

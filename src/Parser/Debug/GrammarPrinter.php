@@ -356,6 +356,7 @@ final class GrammarPrinter
         return match ($part) {
             Part::Optional => sprintf('%s?', $this->sequencePart($arguments[0])),
             Part::Many => sprintf('%s*', $this->sequencePart($arguments[0])),
+            Part::OneOrMore => sprintf('%s+', $this->sequencePart($arguments[0])),
             Part::SeparatedBy => sprintf(
                 '(%s (%s %s)*)?',
                 $this->sequencePart($arguments[0]),

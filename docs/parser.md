@@ -350,7 +350,82 @@ final readonly class BinaryExpressionNode implements ExpressionNode
 $expression = $parser->parse(BinaryExpressionNode::class);
 ```
 
-The node class does not need a `parse()` method. For custom logic, a node can still implement `ParseableNodeInterface`.
+The node class does not need a `parse()` method. For custom logic, use `#[Parse(...)]`
+with a parslet class, or implement `ParseableNodeInterface` directly.
+
+### Parse Parslets
+
+`#[Parse]` attaches reusable parser logic to a node. The attribute names a
+parslet class and can pass constructor arguments to configure that parslet. The
+parslet receives the active `Parser`, the reflected node class, and the
+reporting mode.
+
+```php
+use Lexicon\Parser\Attributes\Parse;
+use Lexicon\Parser\Parser;
+use Lexicon\Parser\ParsletInterface;
+use ReflectionClass;
+
+#[Parse(IntegerParslet::class, ['Expected integer.'])]
+final readonly class IntegerNode
+{
+    public function __construct(public Token $token)
+    {
+    }
+}
+
+final readonly class IntegerParslet implements ParsletInterface
+{
+    public function __construct(private string $message)
+    {
+    }
+
+    public function parse(Parser $parser, ReflectionClass $nodeClass, bool $report): ?object
+    {
+        $token = $report
+            ? $parser->expect(MyToken::Integer, $this->message)
+            : $parser->tokens->match(MyToken::Integer);
+
+        return $token === null ? null : $nodeClass->newInstance($token);
+    }
+}
+```
+
+Internally, parser attributes are resolved through a parslet factory. Built-in
+recipes such as `Terminal`, `OneOf`, and `Sequence` are implemented as parslets,
+and custom parslets use the same execution path.
+
+Attributes can also provide their own parslet by implementing
+`ParsletProviderInterface`. This keeps reusable recipes local to the attribute
+instead of requiring every attribute type to be registered in the default
+factory.
+
+Repeatable or grouped attributes can implement `NodeParsletProviderInterface`
+when they need to inspect the whole node class. `Sequence` uses this to combine
+multiple `#[Sequence(...)]` attributes into one alternatives parslet.
+
+`#[Parse]` can also use enum dispatch. When the first array item is an enum case
+that implements `ParsletDispatchInterface`, the parslet factory wraps the enum
+case and forwards the remaining array items as arguments:
+
+```php
+use Lexicon\Parser\ParsletDispatchInterface;
+
+#[Parse([SyntaxParslet::Expression, precedence: 10])]
+final readonly class ExpressionNode
+{
+}
+
+enum SyntaxParslet implements ParsletDispatchInterface
+{
+    case Expression;
+
+    public function parse(Parser $parser, ReflectionClass $nodeClass, bool $report, array $arguments): ?object
+    {
+        // dispatch by enum case and use $arguments as configuration
+    }
+}
+```
 
 ### BNF Mapping
 
@@ -369,7 +444,7 @@ A ("," A)*            #[SeparatedByRequired(...)]
 "(" A ("," A)* ")"    #[ListBetween(...)]
 A B C                 #[Sequence(...)]
 A (op A)*             #[Fold(...)]
-custom                ParseableNodeInterface
+custom                #[Parse(...)] or ParseableNodeInterface
 ```
 
 ## Small Parser DSL

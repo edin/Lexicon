@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace Lexicon\Parser\Attributes;
 
 use Attribute;
+use Lexicon\Parser\ParsletFactoryInterface;
+use Lexicon\Parser\ParsletInterface;
+use Lexicon\Parser\ParsletProviderInterface;
+use Lexicon\Parser\Parslets\SeparatedByRequiredParslet;
 use UnitEnum;
 
 #[Attribute(Attribute::TARGET_CLASS)]
-final readonly class SeparatedByRequired
+final readonly class SeparatedByRequired implements ParsletProviderInterface
 {
     /**
      * @param class-string<object> $node
@@ -19,5 +23,10 @@ final readonly class SeparatedByRequired
         public bool $allowTrailingSeparator = false
     )
     {
+    }
+
+    public function parslet(ParsletFactoryInterface $factory): ParsletInterface
+    {
+        return new SeparatedByRequiredParslet($this);
     }
 }
